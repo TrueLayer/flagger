@@ -60,7 +60,8 @@ func (gwr *GatewayAPIV1Beta1Router) Reconcile(canary *flaggerv1.Canary) error {
 		return fmt.Errorf("GatewayRefs must be specified when using Gateway API as a provider.")
 	}
 
-	apexSvcName, primarySvcName, canarySvcName := canary.GetServiceNames()
+	_, primarySvcName, canarySvcName := canary.GetServiceNames()
+	routeName := canary.GetHTTPRouteName()
 
 	hrNamespace := canary.Namespace
 
@@ -119,7 +120,7 @@ func (gwr *GatewayAPIV1Beta1Router) Reconcile(canary *flaggerv1.Canary) error {
 	}
 
 	httpRoute, err := gwr.gatewayAPIClient.GatewayapiV1beta1().HTTPRoutes(hrNamespace).Get(
-		context.TODO(), apexSvcName, metav1.GetOptions{},
+		context.TODO(), routeName, metav1.GetOptions{},
 	)
 
 	newMetadata := canary.Spec.Service.Apex
@@ -137,7 +138,7 @@ func (gwr *GatewayAPIV1Beta1Router) Reconcile(canary *flaggerv1.Canary) error {
 	if errors.IsNotFound(err) {
 		route := &v1beta1.HTTPRoute{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:        apexSvcName,
+				Name:        routeName,
 				Namespace:   hrNamespace,
 				Labels:      newMetadata.Labels,
 				Annotations: newMetadata.Annotations,
@@ -159,13 +160,13 @@ func (gwr *GatewayAPIV1Beta1Router) Reconcile(canary *flaggerv1.Canary) error {
 			Create(context.TODO(), route, metav1.CreateOptions{})
 
 		if err != nil {
-			return fmt.Errorf("HTTPRoute %s.%s create error: %w", apexSvcName, hrNamespace, err)
+			return fmt.Errorf("HTTPRoute %s.%s create error: %w", routeName, hrNamespace, err)
 		}
 		gwr.logger.With("canary", fmt.Sprintf("%s.%s", canary.Name, canary.Namespace)).
 			Infof("HTTPRoute %s.%s created", route.GetName(), hrNamespace)
 		return nil
 	} else if err != nil {
-		return fmt.Errorf("HTTPRoute %s.%s get error: %w", apexSvcName, hrNamespace, err)
+		return fmt.Errorf("HTTPRoute %s.%s get error: %w", routeName, hrNamespace, err)
 	}
 
 	ignoreCmpOptions := []cmp.Option{
@@ -241,11 +242,12 @@ func (gwr *GatewayAPIV1Beta1Router) GetRoutes(canary *flaggerv1.Canary) (
 	mirrored bool,
 	err error,
 ) {
-	apexSvcName, primarySvcName, canarySvcName := canary.GetServiceNames()
+	_, primarySvcName, canarySvcName := canary.GetServiceNames()
+	routeName := canary.GetHTTPRouteName()
 	hrNamespace := canary.Namespace
-	httpRoute, err := gwr.gatewayAPIClient.GatewayapiV1beta1().HTTPRoutes(hrNamespace).Get(context.TODO(), apexSvcName, metav1.GetOptions{})
+	httpRoute, err := gwr.gatewayAPIClient.GatewayapiV1beta1().HTTPRoutes(hrNamespace).Get(context.TODO(), routeName, metav1.GetOptions{})
 	if err != nil {
-		err = fmt.Errorf("HTTPRoute %s.%s get error: %w", apexSvcName, hrNamespace, err)
+		err = fmt.Errorf("HTTPRoute %s.%s get error: %w", routeName, hrNamespace, err)
 		return
 	}
 	var weightedRule *v1beta1.HTTPRouteRule
@@ -301,11 +303,12 @@ func (gwr *GatewayAPIV1Beta1Router) SetRoutes(
 ) error {
 	pWeight := int32(primaryWeight)
 	cWeight := int32(canaryWeight)
-	apexSvcName, primarySvcName, canarySvcName := canary.GetServiceNames()
+	_, primarySvcName, canarySvcName := canary.GetServiceNames()
+	routeName := canary.GetHTTPRouteName()
 	hrNamespace := canary.Namespace
-	httpRoute, err := gwr.gatewayAPIClient.GatewayapiV1beta1().HTTPRoutes(hrNamespace).Get(context.TODO(), apexSvcName, metav1.GetOptions{})
+	httpRoute, err := gwr.gatewayAPIClient.GatewayapiV1beta1().HTTPRoutes(hrNamespace).Get(context.TODO(), routeName, metav1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("HTTPRoute %s.%s get error: %w", apexSvcName, hrNamespace, err)
+		return fmt.Errorf("HTTPRoute %s.%s get error: %w", routeName, hrNamespace, err)
 	}
 	hrClone := httpRoute.DeepCopy()
 	hostNames := []v1beta1.Hostname{}

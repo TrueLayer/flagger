@@ -74,6 +74,45 @@ func TestGatewayAPIRouter_Reconcile(t *testing.T) {
 	assert.Equal(t, httpRoute.Annotations["foo"], "bar")
 }
 
+func TestGatewayAPIRouter_ReconcileCustomHTTPRouteName(t *testing.T) {
+	canary := newTestGatewayAPICanary()
+	canary.Spec.Service.HTTPRouteName = "my-custom-route"
+	mocks := newFixture(canary)
+	router := &GatewayAPIRouter{
+		gatewayAPIClient: mocks.meshClient,
+		kubeClient:       mocks.kubeClient,
+		logger:           mocks.logger,
+	}
+
+	err := router.Reconcile(canary)
+	require.NoError(t, err)
+
+	// HTTPRoute should be created with the custom name
+	httpRoute, err := router.gatewayAPIClient.GatewayapiV1().HTTPRoutes("default").Get(context.TODO(), "my-custom-route", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "my-custom-route", httpRoute.Name)
+
+	// BackendRefs should still point at the primary and canary services
+	backendRefs := httpRoute.Spec.Rules[0].BackendRefs
+	require.Equal(t, 2, len(backendRefs))
+	assert.Equal(t, v1.ObjectName("podinfo-primary"), backendRefs[0].Name)
+	assert.Equal(t, v1.ObjectName("podinfo-canary"), backendRefs[1].Name)
+
+	// GetRoutes and SetRoutes should work with the custom name
+	primaryWeight, canaryWeight, _, err := router.GetRoutes(canary)
+	require.NoError(t, err)
+	assert.Equal(t, 100, primaryWeight)
+	assert.Equal(t, 0, canaryWeight)
+
+	err = router.SetRoutes(canary, 50, 50, false)
+	require.NoError(t, err)
+
+	primaryWeight, canaryWeight, _, err = router.GetRoutes(canary)
+	require.NoError(t, err)
+	assert.Equal(t, 50, primaryWeight)
+	assert.Equal(t, 50, canaryWeight)
+}
+
 func TestGatewayAPIRouter_Routes(t *testing.T) {
 	canary := newTestGatewayAPICanary()
 	mocks := newFixture(canary)

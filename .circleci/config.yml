@@ -15,7 +15,7 @@ definitions:
 
 workflows:
   version: 2
-  build-test-deploy:
+  push-image:
     jobs:
       - releaser/docker-build-and-push:
           image_name: "flagger"
@@ -23,6 +23,5 @@ workflows:
             - org-global
             - euw1-development
           registries: "jfrog,aws_ecr"
-          with_cachepot: true
           filters:
             <<: *on_tag
